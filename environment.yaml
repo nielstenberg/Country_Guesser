@@ -11,3 +11,6 @@ dependencies:
     - mapbox-vector-tile
     - fastparquet
     - geopandas
+    - tqdm
+    - pillow
+    - matplotlib

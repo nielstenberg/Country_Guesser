@@ -5,6 +5,7 @@ import geopandas as gpd
 import json
 from shapely.geometry import Point
 import math
+from tqdm import tqdm
 
 ACCESS_TOKEN = "MLY|25484984784501735|4633da3c1fba24964c4a1ce031b9e238"
 
@@ -27,7 +28,6 @@ def mvt_to_lonlat(tx, ty, z, x, y, extent=4096):
 
     return lon, lat
 
-
 def tile_to_records(tile, z, x, y):
     if "overview" not in tile:
         return []
@@ -46,7 +46,9 @@ def tile_to_records(tile, z, x, y):
             "image_id": props.get("id"),
             "sequence_id": props.get("sequence_id"),
             "is_pano": props.get("is_pano"),
-            "tile": (z, x, y),
+            "tile_z": z,
+            "tile_x": x,
+            "tyle_y": y,
         })
 
     return records
@@ -66,7 +68,7 @@ def main():
         print(f"Fetching tile z={z}, x={x}, y={y}")
         tile = fetch_overview_tile(z, x, y)
         recs = tile_to_records(tile, z, x, y)
-        print(f" → {len(recs)} images")
+        print(f"{len(recs)} images")
         all_records.extend(recs)
 
     df = pd.DataFrame(all_records)
@@ -77,35 +79,32 @@ def main():
     pt = Point(dp['lon'], dp['lat'])
     inside = europe[europe.contains(pt)]
     
-    if len(inside) > 0:
-        country = inside.iloc[0]["NAME"]
-        print("Inside:", country)
-    else:
-        print("Point is outside Europe")
-        
-    country_counts = {}
+    raw_data = []
 
-    # Loop through the first x datapoints
-    x = 100000
-    for idx, dp in df.iloc[:x].iterrows():
+    # Obtain the first x datapoints
+    x = 1000000
+    for idx, dp in tqdm(df.iloc[:x].iterrows(), total=min(x, len(df))):
         pt = Point(dp['lon'], dp['lat'])
         
         inside = europe[europe.contains(pt)]
         
-        if len(inside) > 0:
+        if len(inside) > 0 and dp["is_pano"] == False:
             country = inside.iloc[0]["NAME"]
-            country_counts[country] = country_counts.get(country, 0) + 1
-        else:
-            country_counts["OUTSIDE_EUROPE"] = country_counts.get("OUTSIDE_EUROPE", 0) + 1
+            dp["country"] = country
+            raw_data.append(dp)
 
-    country_counts = pd.Series(country_counts).sort_values(ascending=False)
-
-    print(country_counts)
-
-    # save df
-    # df.to_csv("mapillary_europe_overview.csv", index=False)
-
+    df = pd.DataFrame(raw_data)
+    
+    df["country"] = df["country"].astype("string")
+    df["sequence_id"] = df["sequence_id"].astype("string")
+    
     print(df.head())
+    
+    print("\nDatapoint counts per country:")
+    print(df["country"].value_counts().sort_values(ascending=False))
+    
+    # save df
+    df.to_parquet("raw_data.parquet", engine="fastparquet", index=False)
 
 if __name__ == "__main__":
     main()
