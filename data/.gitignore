@@ -1,2 +1,4 @@
 *.parquet
 *.jpg
+.DS_store
+/country_images

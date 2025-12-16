@@ -1,5 +1,5 @@
 Creating conda environment:
-conda env update -f environment.yaml --prune
+conda env create -f environment.yaml
 
 Activating conda environment:
 conda activate country_guesser
