@@ -14,3 +14,4 @@ dependencies:
     - tqdm
     - pillow
     - matplotlib
+    - astral

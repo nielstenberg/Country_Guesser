@@ -2,18 +2,24 @@ import requests
 import mapbox_vector_tile
 import pandas as pd
 import geopandas as gpd
-import json
+# import json
 from shapely.geometry import Point
 import math
 from tqdm import tqdm
+from astral import LocationInfo
+from astral.sun import sun
+from datetime import timezone
 
 ACCESS_TOKEN = "MLY|25484984784501735|4633da3c1fba24964c4a1ce031b9e238"
 
+
 def fetch_overview_tile(z, x, y):
-    url = f"https://tiles.mapillary.com/maps/vtp/mly1_public/2/{z}/{x}/{y}?access_token={ACCESS_TOKEN}"
+    url = f"https://tiles.mapillary.com/maps/vtp/mly1_public/2/{z}/{x}/{y}" \
+          f"?access_token={ACCESS_TOKEN}"
     r = requests.get(url)
     r.raise_for_status()
     return mapbox_vector_tile.decode(r.content)
+
 
 def mvt_to_lonlat(tx, ty, z, x, y, extent=4096):
     # convert tile-local coords to world pixel coords
@@ -23,10 +29,12 @@ def mvt_to_lonlat(tx, ty, z, x, y, extent=4096):
     # convert to lon/lat
     n = 2 ** z
     lon = world_x / (extent * n) * 360.0 - 180.0
-    lat_rad = math.atan(math.sinh(math.pi - 2 * math.pi * world_y / (extent * n)))
+    lat_rad = math.atan(math.sinh(math.pi - 2 * math.pi * world_y /
+                                  (extent * n)))
     lat = math.degrees(lat_rad)
 
     return lon, lat
+
 
 def tile_to_records(tile, z, x, y):
     if "overview" not in tile:
@@ -53,6 +61,23 @@ def tile_to_records(tile, z, x, y):
 
     return records
 
+
+def is_daytime(lon, lat, captured_at):
+    location = LocationInfo(latitude=lat, longitude=lon)
+    try:
+        s = sun(location.observer, date=captured_at.date())
+        sunrise_utc = s['sunrise'].astimezone(timezone.utc)
+        sunset_utc = s['sunset'].astimezone(timezone.utc)
+        return sunrise_utc <= captured_at <= sunset_utc
+    except ValueError:
+        # Sun never rises or never sets:
+        #  treat all hours as daytime or nighttime
+        # False: skip polar night
+        # True: keep polar day
+        # I've set it to false for now
+        return False
+
+
 def main():
     # europe is approximately contained within these tiles
     europe_tiles = [
@@ -61,7 +86,7 @@ def main():
         (4, 8, 3), (4, 9, 3), (5, 17, 12),
         (5, 15, 12)
     ]
-    
+
     all_records = []
 
     for z, x, y in europe_tiles:
@@ -72,39 +97,43 @@ def main():
         all_records.extend(recs)
 
     df = pd.DataFrame(all_records)
+    df["captured_at"] = pd.to_datetime(df["captured_at"], unit='ms', utc=True)
     print("Total images:", len(df))
-    
-    europe = gpd.read_file("europe_polygon/europe.geojson")
+
+    europe = gpd.read_file("data/europe_polygon/europe.geojson")
     dp = df.iloc[2]
     pt = Point(dp['lon'], dp['lat'])
     inside = europe[europe.contains(pt)]
-    
+
     raw_data = []
 
     # Obtain the first x datapoints
     x = 1000000
     for idx, dp in tqdm(df.iloc[:x].iterrows(), total=min(x, len(df))):
         pt = Point(dp['lon'], dp['lat'])
-        
+
         inside = europe[europe.contains(pt)]
-        
-        if len(inside) > 0 and dp["is_pano"] == False:
-            country = inside.iloc[0]["NAME"]
-            dp["country"] = country
-            raw_data.append(dp)
+
+        if not inside.empty and not dp["is_pano"]:
+            if is_daytime(dp['lon'], dp['lat'], dp['captured_at']):
+                dp = dp.copy()  # create a separate copy before changing values
+                dp["country"] = inside.iloc[0]["NAME"]
+                raw_data.append(dp)
 
     df = pd.DataFrame(raw_data)
-    
+
     df["country"] = df["country"].astype("string")
     df["sequence_id"] = df["sequence_id"].astype("string")
-    
+    df["captured_at"] = pd.to_datetime(df["captured_at"], unit='ms', utc=True)
+
     print(df.head())
-    
+
     print("\nDatapoint counts per country:")
     print(df["country"].value_counts().sort_values(ascending=False))
-    
+
     # save df
     df.to_parquet("raw_data.parquet", engine="fastparquet", index=False)
+
 
 if __name__ == "__main__":
     main()
