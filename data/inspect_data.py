@@ -57,6 +57,7 @@ def random_image(df, seed=None, save_path="random_image.jpg"):
 
     return row
 
+
 def n_random_images(df, n, session, seed=None):
     rows = df.sample(n=n, random_state=seed)
 
@@ -85,6 +86,7 @@ def n_random_images(df, n, session, seed=None):
 
     return rows
 
+
 def download_image(img_id, url, output_dir):
     filename = f"{img_id}.jpg"
     filepath = os.path.join(output_dir, filename)
@@ -92,34 +94,36 @@ def download_image(img_id, url, output_dir):
     r.raise_for_status()
     with open(filepath, "wb") as file:
         file.write(r.content)
-    
+
+
 def download_country_images(df, country, output_dir):
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)
 
     os.makedirs(output_dir)
-    
+
     rows = df.loc[df["country"] == country, ["image_id", "img_url"]].dropna()
-    
+
     print(f"Saving images to: {os.path.abspath(output_dir)}")
     print(f"Found {len(rows)} images for {country}")
-    
+
     with ThreadPoolExecutor(max_workers=10) as executor:
         executor.map(
             lambda row: download_image(row.image_id, row.img_url, output_dir),
             rows.itertuples(index=False)
         )
 
+
 def main():
     split_data = "split_data.parquet"
     df = pd.read_parquet(split_data, engine="fastparquet")
-    
+
     # random_image(df)
-    
-    # session = requests.Session()
-    # n_random_images(df, n=8, session=session)
-    
-    download_country_images(df, "United Kingdom", "country_images")
+
+    session = requests.Session()
+    n_random_images(df, n=8, session=session)
+
+    download_country_images(df, "Croatia", "country_images")
 
 
 if __name__ == "__main__":
