@@ -100,7 +100,7 @@ def main():
     df["captured_at"] = pd.to_datetime(df["captured_at"], unit='ms', utc=True)
     print("Total images:", len(df))
 
-    europe = gpd.read_file("data/europe_polygon/europe.geojson")
+    europe = gpd.read_file("europe_polygon/europe.geojson")
     dp = df.iloc[2]
     pt = Point(dp['lon'], dp['lat'])
     inside = europe[europe.contains(pt)]

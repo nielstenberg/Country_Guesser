@@ -1,1 +1,3 @@
 .DS_store
+*.txt
+model/saved_models
