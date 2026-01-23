@@ -15,7 +15,7 @@ dependencies:
     - pillow
     - matplotlib
     - astral
-    - pytorch
+    - torch
     - torchvision
     - numpy
-    - opencv
+    - opencv-python
