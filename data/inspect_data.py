@@ -115,7 +115,7 @@ def download_country_images(df, country, output_dir):
 
 
 def main():
-    split_data = "split_data.parquet"
+    split_data = "datasets/split_data.parquet"
     df = pd.read_parquet(split_data, engine="fastparquet")
 
     # random_image(df)

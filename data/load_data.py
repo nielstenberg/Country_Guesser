@@ -132,7 +132,7 @@ def main():
     print(df["country"].value_counts().sort_values(ascending=False))
 
     # save df
-    df.to_parquet("raw_data.parquet", engine="fastparquet", index=False)
+    df.to_parquet("datasets/raw_data.parquet", engine="fastparquet", index=False)
 
 
 if __name__ == "__main__":
