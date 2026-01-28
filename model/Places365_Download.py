@@ -19,5 +19,5 @@ model.load_state_dict(new_state_dict)
 model.to(DEVICE)
 model.eval()
 
-torch.save(model.state_dict(), "saved_models/resnet50_places365.pth")
+torch.save(model.state_dict(), "model/resnet50_places365.pth")
 print("Model saved as 'resnet50_places365.pth'")
