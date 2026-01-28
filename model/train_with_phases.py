@@ -93,7 +93,7 @@ def make_optimizer(model, lrs):
 def load_resnet50(num_classes: int) -> nn.Module:
     model = models.resnet50(num_classes=365)
 
-    state = torch.load("model/saved_models/resnet50_places365.pth", map_location="cpu", weights_only=True)
+    state = torch.load("model/resnet50_places365.pth", map_location="cpu", weights_only=True)
     model.load_state_dict(state)
 
     model.fc = nn.Linear(model.fc.in_features, num_classes)
@@ -245,7 +245,7 @@ def train():
                     "model_state": model.state_dict(),
                     "country_index": country_index,
                     "index_country": index_country},
-                    "model/saved_models/resnet50_country_best.pth")
+                    "model/resnet50_country_best.pth")
         
     tqdm.write(f"Best validation acccuracy | top-1: {best_validation_top1:.4f} | top-3: {best_validation_top3:.4f} | top-5: {best_validation_top5:.4f}")
 
