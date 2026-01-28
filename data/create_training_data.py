@@ -98,10 +98,10 @@ def n_per_country(df, n, test_size, val_size, seed):
 
 
 def main():
-    raw_data = "datasets/raw_data.parquet"
+    raw_data = "data/datasets/raw_data.parquet"
     df = pd.read_parquet(raw_data, engine="fastparquet")
     
-    with open("bad_images.json", "r") as f:
+    with open("data/bad_images.json", "r") as f:
         bad_images = set(json.load(f))
         
     df = df[~df["image_id"].astype(str).isin(bad_images)]
@@ -120,7 +120,7 @@ def main():
     )
 
     # save split data
-    split_data.to_parquet("datasets/split_data.parquet",
+    split_data.to_parquet("data/datasets/split_data.parquet",
                           engine="fastparquet", index=False)
 
 

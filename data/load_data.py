@@ -100,7 +100,7 @@ def main():
     df["captured_at"] = pd.to_datetime(df["captured_at"], unit='ms', utc=True)
     print("Total images:", len(df))
 
-    europe = gpd.read_file("europe_polygon/europe.geojson")
+    europe = gpd.read_file("data/europe_polygon/europe.geojson")
     dp = df.iloc[2]
     pt = Point(dp['lon'], dp['lat'])
     inside = europe[europe.contains(pt)]
@@ -132,7 +132,7 @@ def main():
     print(df["country"].value_counts().sort_values(ascending=False))
 
     # save df
-    df.to_parquet("datasets/raw_data.parquet", engine="fastparquet", index=False)
+    df.to_parquet("data/datasets/raw_data.parquet", engine="fastparquet", index=False)
 
 
 if __name__ == "__main__":
