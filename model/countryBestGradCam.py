@@ -15,7 +15,7 @@ if os.path.exists("outputs"):
     shutil.rmtree("outputs")
 os.makedirs("outputs", exist_ok=True)
 
-state = torch.load("model/resnet50_country_best.pth", map_location="cpu")
+state = torch.load("model/resnet50_country_best_1000.pth", map_location="cpu")
 
 num_classes = len(state["index_country"])
 
@@ -24,7 +24,7 @@ model.fc = nn.Linear(model.fc.in_features, num_classes)
 
 model.load_state_dict(state["model_state"])
 
-state = torch.load("model/resnet50_country_best.pth", map_location="cpu")
+state = torch.load("model/resnet50_country_best_1000.pth", map_location="cpu")
 model.load_state_dict(state["model_state"])
 model.eval()
 
