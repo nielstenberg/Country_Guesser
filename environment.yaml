@@ -21,3 +21,4 @@ dependencies:
     - opencv-python
     - aiohttp
     - asyncio
+    - torchmetrics

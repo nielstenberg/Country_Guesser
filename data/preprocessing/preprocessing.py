@@ -24,7 +24,6 @@ class Augmentor:
         )
 
     def __call__(self, image):
-
         if torch.rand(1) < self.chances.get("rotation", 0.0):
             image = self.rotate(image)
 
@@ -36,13 +35,10 @@ class Augmentor:
 
         return image
 
-
-chances = {
-    "rotation": 0.3,
-    "flip_horizontal": 0.3,
-    "blur": 0.3,
-    "perspective_distortion": 0.3,
-    "colour_jitter": 0.3,
+chances = { 
+    "rotation": 0.3, 
+    "blur": 0.3, 
+    "colour_jitter": 0.3, 
 }
 
 augment = Augmentor(chances)
