@@ -208,9 +208,19 @@ def delete_image_id(parquet_path, image_id, output_path=None):
 
     return df
 
+def image_distribution(df):
+    return df["country"].value_counts().sort_values(ascending=False)
+
 def main():
-    # split_data = "datasets/split_data.parquet"
-    # df = pd.read_parquet(split_data, engine="fastparquet")
+    split_data = "datasets/split_data_1000.parquet"
+    df = pd.read_parquet(split_data, engine="fastparquet")
+    
+    # raw_data = "datasets/raw_data.parquet"
+    # df = pd.read_parquet(raw_data, engine="fastparquet")
+    
+    distribution = image_distribution(df[df["split"] == "test"])
+    print(distribution)
+    print(len(df))
 
     # random_image(df)
 
@@ -224,12 +234,12 @@ def main():
     # print(bad_image_ids)
     # print(len(bad_image_ids))
 
-    delete_image_id(
-        parquet_path="datasets/split_data.parquet",
-        image_id=759983608038195,
-        output_path="datasets/split_data.parquet",
-    )
-
+    # delete_image_id(
+    #     parquet_path="datasets/split_data.parquet",
+    #     image_id=759983608038195,
+    #     output_path="datasets/split_data.parquet",
+    # )
+    pass
 
 if __name__ == "__main__":
     main()
