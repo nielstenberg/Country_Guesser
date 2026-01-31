@@ -10,10 +10,12 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import models, transforms
 from tqdm import tqdm
 from data.preprocessing.preprocessing import preprocess, input_transform
+import csv
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 LR = 1e-3
 EPOCHS = 5
+BATCH_SIZE = 64
 
 PHASES = [
     {
@@ -26,7 +28,7 @@ PHASES = [
         "name": "finetune_layer4",
         "epochs": 8,
         "unfreeze": ["layer4", "fc"],
-        "lrs": {"layer4": 1e-4, "fc": 1e-3},
+        "lrs": {"layer4": 5e-5, "fc": 1e-3},
     },
 ]
 
@@ -110,7 +112,7 @@ def topk_accuracy(logits: torch.Tensor, y: torch.Tensor, k: int) -> float:
 def accuracy(logits: torch.Tensor, y: torch.Tensor) -> float:
     return (logits.argmax(dim=1) == y).float().mean().item()
 
-def train():
+def train(experiment_name):
     df = pd.read_parquet("data/datasets/split_data_1000.parquet")
     
     required_columns = {"img_url", "country", "split"}
@@ -139,7 +141,7 @@ def train():
     
     train_loader = DataLoader(
         CountryDataset(train_df, country_index, transform=preprocess),
-        batch_size = 64,
+        batch_size = BATCH_SIZE,
         shuffle=True,
         num_workers = 16,
         pin_memory=True
@@ -147,7 +149,7 @@ def train():
 
     val_loader = DataLoader(
         CountryDataset(val_df, country_index, transform=input_transform),
-        batch_size = 64,
+        batch_size = BATCH_SIZE,
         shuffle=False,
         num_workers = 16,
         pin_memory=True
@@ -168,86 +170,153 @@ def train():
     scaler = torch.amp.GradScaler("cuda", enabled=(DEVICE.type == "cuda"))
     global_epoch = 0
     
-    for phase in PHASES:
-        print(f"\n=== Phase: {phase['name']} ===")
-        configure_trainable_params(model, phase["unfreeze"])
-        optimizer = make_optimizer(model, phase["lrs"])
+    with open(f"model/logs/training_metrics_{experiment_name}.csv", "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            "epoch", "phase",
+            "train_loss", "train_top1",
+            "val_loss", "val_top1", "val_top3", "val_top5"
+        ])
+        
+        for phase in PHASES:
+            print(f"\n=== Phase: {phase['name']} ===")
+            configure_trainable_params(model, phase["unfreeze"])
+            optimizer = make_optimizer(model, phase["lrs"])
 
-        for epoch in range(1, phase["epochs"] + 1):
-            global_epoch += 1
-            model.train()
-            
-            train_loss = 0.0
-            train_acc = 0.0
-            n = 0
-
-            for x, y in tqdm(train_loader, desc =f"Epoch {global_epoch} [{phase['name']}] {epoch}/{phase['epochs']} [train]"):
-                x = x.to(DEVICE, non_blocking=True)
-                y = y.to(DEVICE, non_blocking=True)
-
-                optimizer.zero_grad(set_to_none=True)
+            for epoch in range(1, phase["epochs"] + 1):
+                global_epoch += 1
+                model.train()
                 
-                with torch.amp.autocast(device_type=DEVICE.type, enabled=(DEVICE.type == "cuda")):
-                    raw_logits = model(x)
-                    loss = loss_fn(raw_logits, y)
+                train_loss = 0.0
+                train_top1 = 0.0
+                n = 0
+
+                for x, y in tqdm(train_loader, desc =f"Epoch {global_epoch} [{phase['name']}] {epoch}/{phase['epochs']} [train]"):
+                    x = x.to(DEVICE, non_blocking=True)
+                    y = y.to(DEVICE, non_blocking=True)
+
+                    optimizer.zero_grad(set_to_none=True)
                     
-                scaler.scale(loss).backward()
-                scaler.step(optimizer)
-                scaler.update()
+                    with torch.amp.autocast(device_type=DEVICE.type, enabled=(DEVICE.type == "cuda")):
+                        raw_logits = model(x)
+                        loss = loss_fn(raw_logits, y)
+                        
+                    scaler.scale(loss).backward()
+                    scaler.step(optimizer)
+                    scaler.update()
 
-
-                current_batch = x.size(0)
-                train_loss += loss.item() * current_batch
-                train_acc += accuracy(raw_logits, y) * current_batch
-                n += current_batch
-
-            train_loss /= n
-            train_acc /= n
-
-            model.eval()
-            validation_loss = 0.0
-            validation_top1 = 0.0
-            validation_top3 = 0.0
-            validation_top5 = 0.0
-            validation_n = 0
-            with torch.no_grad():
-                for x, y in tqdm(val_loader, desc =f"Epoch {global_epoch} [{phase['name']}] {epoch}/{phase['epochs']} [validation]"):
-                    x = x.to(DEVICE)
-                    y = y.to(DEVICE)
-                    
-                    raw_logits = model(x)
-                    loss = loss_fn(raw_logits, y)
 
                     current_batch = x.size(0)
-                    validation_loss += loss.item() * current_batch
-                    validation_top1 += topk_accuracy(raw_logits, y, k=1) * current_batch
-                    validation_top3 += topk_accuracy(raw_logits, y, k=3) * current_batch
-                    validation_top5 += topk_accuracy(raw_logits, y, k=5) * current_batch
-                    validation_n += current_batch
+                    train_loss += loss.item() * current_batch
+                    train_top1 += accuracy(raw_logits, y) * current_batch
+                    n += current_batch
 
-                validation_loss /= validation_n
-                validation_top1 /= validation_n
-                validation_top3 /= validation_n
-                validation_top5 /= validation_n
+                train_loss /= n
+                train_top1 /= n
 
-                tqdm.write(f"Epoch {global_epoch} [{phase['name']}] {epoch}/{phase['epochs']} | "
-                    f"Train loss {train_loss:.4f} accuracy {train_acc:.4f} | "
-                    f"Validation loss: {validation_loss:.4f} "
-                    f"| Top-1: {validation_top1:.4f} "
-                    f"| Top-3: {validation_top3:.4f} "
-                    f"| Top-5: {validation_top5:.4f}")
+                model.eval()
+                validation_loss = 0.0
+                validation_top1 = 0.0
+                validation_top3 = 0.0
+                validation_top5 = 0.0
+                validation_n = 0
+                with torch.no_grad():
+                    for x, y in tqdm(val_loader, desc =f"Epoch {global_epoch} [{phase['name']}] {epoch}/{phase['epochs']} [validation]"):
+                        x = x.to(DEVICE)
+                        y = y.to(DEVICE)
+                        
+                        raw_logits = model(x)
+                        loss = loss_fn(raw_logits, y)
 
-            if validation_top3 > best_validation_top3:
-                best_validation_top1 = validation_top1
-                best_validation_top3 = validation_top3
-                best_validation_top5 = validation_top5
-                torch.save({
-                    "model_state": model.state_dict(),
-                    "country_index": country_index,
-                    "index_country": index_country},
-                    "model/resnet50_country_best.pth")
+                        current_batch = x.size(0)
+                        validation_loss += loss.item() * current_batch
+                        validation_top1 += topk_accuracy(raw_logits, y, k=1) * current_batch
+                        validation_top3 += topk_accuracy(raw_logits, y, k=3) * current_batch
+                        validation_top5 += topk_accuracy(raw_logits, y, k=5) * current_batch
+                        validation_n += current_batch
+
+                    validation_loss /= validation_n
+                    validation_top1 /= validation_n
+                    validation_top3 /= validation_n
+                    validation_top5 /= validation_n
+
+                    tqdm.write(f"Epoch {global_epoch} [{phase['name']}] {epoch}/{phase['epochs']} | "
+                        f"Train loss {train_loss:.4f} accuracy {train_top1:.4f} | "
+                        f"Validation loss: {validation_loss:.4f} "
+                        f"| Top-1: {validation_top1:.4f} "
+                        f"| Top-3: {validation_top3:.4f} "
+                        f"| Top-5: {validation_top5:.4f}")
+
+                if validation_top1 > best_validation_top1:
+                    best_validation_top1 = validation_top1
+                    best_validation_top3 = validation_top3
+                    best_validation_top5 = validation_top5
+                    torch.save({
+                        "model_state": model.state_dict(),
+                        "country_index": country_index,
+                        "index_country": index_country},
+                        f"model/saved_models/resnet50_country_best_{experiment_name}.pth")
+                    
+                writer.writerow([
+                    global_epoch, phase["name"],
+                    train_loss, train_top1,
+                    validation_loss, validation_top1,
+                    validation_top3, validation_top5
+                ])
+                
+                f.flush()
         
     tqdm.write(f"Best validation acccuracy | top-1: {best_validation_top1:.4f} | top-3: {best_validation_top3:.4f} | top-5: {best_validation_top5:.4f}")
 
 if __name__ == "__main__":
-    train()
+    experiment_name = "1000"
+    train(experiment_name)
+    
+    # test
+    ckpt = torch.load(f"model/resnet50_country_best_{experiment_name}.pth")
+    country_index = ckpt["country_index"]
+    num_classes = len(country_index)
+
+    model = load_resnet50(num_classes).to(DEVICE)
+    model.load_state_dict(ckpt["model_state"])
+    model.eval()
+    
+    loss_fn = nn.CrossEntropyLoss()
+
+    df = pd.read_parquet("data/datasets/split_data_1000.parquet")
+    test_df = df[df["split"] == "test"].dropna(subset=["img_url", "country"])
+    
+    test_loader = DataLoader(
+        CountryDataset(test_df, country_index, transform=input_transform),
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=16,
+    )
+    
+    test_loss = 0.0
+    test_top1 = 0.0
+    test_top3 = 0.0
+    test_top5 = 0.0
+    test_n = 0
+    
+    with torch.no_grad():
+        for x, y in test_loader:
+            x = x.to(DEVICE)
+            y = y.to(DEVICE)
+            
+            raw_logits = model(x)
+            loss = loss_fn(raw_logits, y)
+            
+            current_batch = x.size(0)
+            test_loss += loss.item() * current_batch
+            test_top1 += topk_accuracy(raw_logits, y, k=1) * current_batch
+            test_top3 += topk_accuracy(raw_logits, y, k=3) * current_batch
+            test_top5 += topk_accuracy(raw_logits, y, k=5) * current_batch
+            test_n += current_batch
+            
+    test_loss /= test_n
+    test_top1 /= test_n
+    test_top3 /= test_n
+    test_top5 /= test_n
+    
+    print(f"TEST RESULTS: LOSS: {test_loss} | top-1: {test_top1} | top-3: {test_top3} | top-5 {test_top5}")
