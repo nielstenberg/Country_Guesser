@@ -39,7 +39,7 @@ row = test_df.sample(1).iloc[0]
 response = requests.get(row.img_url)
 img = Image.open("my_test_image.jpg").convert("RGB")
 
-print(f"Random TEST image: {row.image_id} | Country: NOT DEFINED")
+print(f"Own test image uploaded | Country: NOT DEFINED")
 print("Image format:", img.size)
 
 img.save("outputs/random_test_image.jpg")
