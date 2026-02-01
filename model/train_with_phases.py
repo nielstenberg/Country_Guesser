@@ -255,7 +255,7 @@ def train(experiment_name):
                         "model_state": model.state_dict(),
                         "country_index": country_index,
                         "index_country": index_country},
-                        f"model/saved_models/resnet50_country_best_{experiment_name}.pth")
+                        f"model/resnet50_country_best_{experiment_name}.pth")
                     
                 writer.writerow([
                     global_epoch, phase["name"],
